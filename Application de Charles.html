@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Association des Ressortissants de Fadiouth Résidant à Mbour et ses Environs</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body{font-family:Arial;background:#eef2f7;padding:20px;text-align:center;}
+h1{color:#1f3a5f;}
+h2{background:#1f3a5f;color:white;padding:10px;border-radius:8px;}
+.card{background:white;padding:20px;margin:10px auto;border-radius:12px;max-width:1100px;}
+input,select,button{padding:8px;margin:5px;border-radius:6px;}
+button{background:#1f3a5f;color:white;cursor:pointer;}
+button:hover{background:#2e5c8a;}
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{border:1px solid #ddd;padding:8px;text-align:center;}
+th{background:#16a085;color:white;}
+.hidden{display:none;}
+.icon{font-size:50px;}
+</style>
+</head>
+
+<body>
+
+<div id="loginPage" class="card">
+<div class="icon">🤝</div>
+<h1>Association des Ressortissants de Fadiouth Résidant à Mbour et ses Environs</h1>
+<input type="password" id="password" placeholder="Mot de passe">
+<br>
+<button onclick="login()">Connexion</button>
+</div>
+
+<div id="app" class="hidden">
+
+<h1>📊 Association des Ressortissants de Fadiouth Résidant à Mbour et ses Environs</h1>
+
+<div class="card">
+<button onclick="exportJSON()">📤 Export JSON</button>
+<input type="file" onchange="importJSON(event)">
+<button onclick="pdfGlobal()">📄 PDF Global des cotisations</button>
+</div>
+
+<div class="card">
+<h2>Ajouter membre</h2>
+<input id="idManuel" placeholder="ID">
+<input id="nom" placeholder="Nom">
+<input id="adresse" placeholder="Adresse">
+<input id="telephone" placeholder="Téléphone">
+<input id="carte" type="number" placeholder="Carte membre">
+<input id="dateAdhesion" type="date">
+<button onclick="ajouterMembre()">Ajouter</button>
+</div>
+
+<div class="card">
+<h2>Recherche & Tri</h2>
+<input id="recherche" placeholder="Rechercher..." onkeyup="afficher()">
+<button onclick="trierID(true)">ID ↑</button>
+<button onclick="trierID(false)">ID ↓</button>
+</div>
+
+<div class="card">
+<h2>Ajouter cotisation</h2>
+<select id="membreSelect"></select>
+<input id="montant" type="number" placeholder="Montant">
+<input id="dateCotisation" type="date">
+<button onclick="ajouterCotisation()">Ajouter</button>
+<button onclick="modifierCotisations()">Modifier cotisations</button>
+</div>
+
+<div class="card">
+<h2>Liste des membres</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Nom</th>
+<th>Adresse</th>
+<th>Téléphone</th>
+<th>Date adhésion</th>
+<th>Carte</th>
+<th>Total</th>
+<th>PDF</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+
+/* LOGIN */
+function login(){
+let pass=document.getElementById("password").value;
+if(pass==="1234"){
+document.getElementById("loginPage").style.display="none";
+document.getElementById("app").classList.remove("hidden");
+speechSynthesis.speak(new SpeechSynthesisUtterance("Bienvenue, mot de passe correct"));
+}else{
+alert("Mot de passe incorrect");
+}
+}
+
+/* DATA */
+let membres=JSON.parse(localStorage.getItem("membres"))||[];
+
+function save(){localStorage.setItem("membres",JSON.stringify(membres));}
+function safe(v){return (v===undefined||v===null||v==="")?"":v;}
+function totalCotisations(m){return m.cotisations.reduce((s,c)=>s+(c.montant||0),0);}
+function total(m){return totalCotisations(m)+(m.carte||0);}
+
+/* AJOUT MEMBRE */
+function ajouterMembre(){
+
+if(membres.length>=1000){
+alert("Limite de 1000 membres atteinte !");
+return;
+}
+
+let id=safe(idManuel.value);
+
+if(membres.some(m=>m.id===id)){
+alert("ID déjà existant !");
+return;
+}
+
+membres.push({
+id:id,
+nom:safe(nom.value),
+adresse:safe(adresse.value),
+telephone:safe(telephone.value),
+carte:Number(carte.value||0),
+dateAdhesion:safe(dateAdhesion.value),
+cotisations:[]
+});
+
+save();afficher();
+
+idManuel.value="";
+nom.value="";
+adresse.value="";
+telephone.value="";
+carte.value="";
+dateAdhesion.value="";
+}
+
+/* TRI */
+function trierID(croissant){
+membres.sort((a,b)=>
+croissant
+? String(a.id).localeCompare(String(b.id))
+: String(b.id).localeCompare(String(a.id))
+);
+afficher();
+}
+
+/* AFFICHAGE */
+function afficher(){
+tbody.innerHTML="";
+membreSelect.innerHTML="";
+
+let filtre=(recherche.value||"").toLowerCase();
+
+membres
+.filter(m=>m.nom.toLowerCase().includes(filtre)||String(m.id).toLowerCase().includes(filtre))
+.forEach((m,i)=>{
+
+tbody.innerHTML+=`
+<tr>
+<td>${safe(m.id)}</td>
+<td>${safe(m.nom)}</td>
+<td>${safe(m.adresse)}</td>
+<td>${safe(m.telephone)}</td>
+<td>${safe(m.dateAdhesion)}</td>
+<td>${m.carte||0} CFA</td>
+<td>${total(m)} CFA</td>
+<td><button onclick="pdf(${i})">PDF</button></td>
+<td>
+<button onclick="modifier(${i})">✏️</button>
+<button onclick="supprimer(${i})">🗑️</button>
+</td>
+</tr>`;
+
+membreSelect.innerHTML+=`<option value="${i}">${m.nom}</option>`;
+});
+}
+
+/* MODIFIER */
+function modifier(i){
+let m=membres[i];
+
+let newID=prompt("ID",m.id);
+if(newID && newID!==m.id){
+if(membres.some(x=>x.id===newID)){
+alert("ID déjà utilisé !");
+}else{m.id=newID;}
+}
+
+m.nom=prompt("Nom",m.nom)||m.nom;
+m.adresse=prompt("Adresse",m.adresse)||m.adresse;
+m.telephone=prompt("Téléphone",m.telephone)||m.telephone;
+m.dateAdhesion=prompt("Date adhésion",m.dateAdhesion)||m.dateAdhesion;
+
+let carte=prompt("Carte",m.carte);
+if(carte!==null && !isNaN(carte)) m.carte=Number(carte);
+
+save();afficher();
+}
+
+/* COTISATIONS */
+function ajouterCotisation(){
+let m=membres[membreSelect.value];
+let d=new Date(dateCotisation.value);
+let mois=d.toLocaleString('fr-FR',{month:'long',year:'numeric'});
+m.cotisations.push({date:safe(dateCotisation.value),mois:mois,montant:Number(montant.value||0)});
+save();afficher();
+montant.value="";dateCotisation.value="";
+}
+
+function modifierCotisations(){
+let m=membres[membreSelect.value];
+if(m.cotisations.length===0){alert("Aucune cotisation");return;}
+
+m.cotisations.forEach(c=>{
+c.date=prompt("Date",c.date)||c.date;
+let d=new Date(c.date);
+c.mois=d.toLocaleString('fr-FR',{month:'long',year:'numeric'});
+let mt=prompt("Montant",c.montant);
+if(mt!==null && !isNaN(mt)) c.montant=Number(mt);
+});
+
+save();afficher();
+}
+
+/* SUPPRIMER */
+function supprimer(i){
+membres.splice(i,1);
+save();afficher();
+}
+
+/* EXPORT / IMPORT */
+function exportJSON(){
+let blob=new Blob([JSON.stringify(membres)],{type:"application/json"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="donnees.json";
+a.click();
+}
+
+function importJSON(e){
+let reader=new FileReader();
+reader.onload=function(){
+membres=JSON.parse(reader.result);
+save();afficher();
+};
+reader.readAsText(e.target.files[0]);
+}
+
+/* PDF MEMBRE ORIGINAL (INCHANGÉ) */
+function pdf(i){
+const {jsPDF}=window.jspdf;
+let doc=new jsPDF();
+let m=membres[i];
+
+doc.setFillColor(31,58,95);
+doc.rect(0,0,210,15,"F");
+doc.setTextColor(255,255,255);
+doc.text("Association des Ressortissants de Fadiouth Résidant à Mbour et ses Environs",10,10);
+
+doc.setTextColor(0,0,0);
+doc.text("Nom: "+safe(m.nom),10,25);
+doc.text("Adresse: "+safe(m.adresse),10,32);
+doc.text("Téléphone: "+safe(m.telephone),10,39);
+doc.text("Date adhésion: "+safe(m.dateAdhesion),10,46);
+doc.text("Carte: "+(m.carte||0)+" CFA",10,53);
+
+let y=65;
+
+doc.setFillColor(22,160,133);
+doc.rect(10,y,190,8,"F");
+doc.setTextColor(255,255,255);
+
+doc.text("Mois",15,y+5);
+doc.text("Date",80,y+5);
+doc.text("Montant",150,y+5);
+
+y+=8;
+doc.setTextColor(0,0,0);
+
+m.cotisations.forEach(c=>{
+doc.rect(10,y,190,8);
+doc.text(safe(c.mois),15,y+5);
+doc.text(safe(c.date),80,y+5);
+doc.text((c.montant||0)+" CFA",150,y+5);
+y+=8;
+});
+
+y+=5;
+doc.text("TOTAL: "+total(m)+" CFA",10,y);
+
+doc.save(m.nom+".pdf");
+}
+
+/* PDF GLOBAL ORIGINAL (INCHANGÉ) */
+function pdfGlobal(){
+const {jsPDF}=window.jspdf;
+let doc=new jsPDF();
+
+doc.setFillColor(31,58,95);
+doc.rect(0,0,210,15,"F");
+doc.setTextColor(255,255,255);
+doc.text("Association des Ressortissants de Fadiouth Résidant à Mbour et ses Environs",10,10);
+
+let y=25;
+
+doc.setFillColor(22,160,133);
+doc.rect(5,y,200,8,"F");
+doc.setTextColor(255,255,255);
+doc.setFontSize(8);
+
+doc.text("ID",6,y+5);
+doc.text("Nom",20,y+5);
+doc.text("Adresse",55,y+5);
+doc.text("Adhésion",100,y+5);
+doc.text("Carte",130,y+5);
+doc.text("Cotisations",150,y+5);
+doc.text("Total",180,y+5);
+
+y+=8;
+doc.setTextColor(0,0,0);
+
+let totalCotisationGlobal=0;
+let totalGeneralGlobal=0;
+
+membres.forEach(m=>{
+let cot=totalCotisations(m);
+let tot=total(m);
+
+totalCotisationGlobal+=cot;
+totalGeneralGlobal+=tot;
+
+doc.rect(5,y,200,8);
+
+doc.text(String(m.id||""),6,y+5);
+doc.text(String(m.nom||""),20,y+5);
+doc.text(String(m.adresse||""),55,y+5);
+doc.text(String(m.dateAdhesion||""),100,y+5);
+doc.text((m.carte||0)+" CFA",130,y+5);
+doc.text(cot+" CFA",150,y+5);
+doc.text(tot+" CFA",180,y+5);
+
+y+=8;
+
+if(y>260){
+doc.addPage();
+y=20;
+}
+});
+
+y+=10;
+
+doc.setFillColor(31,58,95);
+doc.rect(5,y,200,10,"F");
+doc.setTextColor(255,255,255);
+doc.text("TOTAL COTISATIONS : "+totalCotisationGlobal+" CFA",10,y+7);
+
+y+=12;
+
+doc.setFillColor(22,160,133);
+doc.rect(5,y,200,10,"F");
+doc.setTextColor(255,255,255);
+doc.text("TOTAL GENERAL : "+totalGeneralGlobal+" CFA",10,y+7);
+
+doc.save("liste_Association.pdf");
+}
+
+afficher();
+
+</script>
+
+</body>
+</html>
